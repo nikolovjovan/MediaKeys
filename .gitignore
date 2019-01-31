@@ -1,1 +1,6 @@
-*.png 
+# Resource files
+*.png
+
+# Binary files
+*.dll
+*.exe
