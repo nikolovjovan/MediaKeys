@@ -1,21 +1,21 @@
-#include %A_LineFile%\..\OSD.ahk
+#include %A_LineFile%\..\WinOSD.ahk
 
-class AutoHotBrightness {
+class BrightnessController {
 	; Based on https://github.com/qwerty12/AutoHotkeyScripts/tree/master/LaptopBrightnessSetter
 	static _WM_POWERBROADCAST := 0x218, hPowrprofMod := DllCall("LoadLibrary", "Str", "powrprof.dll", "Ptr")
 	static _osdHwnd := 0, _stepSize := 10
 
 	__New() {
-		if (AutoHotBrightness.GetAcStatus(AC))
+		if (BrightnessController.GetAcStatus(AC))
 			this._AC := AC
 		; Sadly the callback passed to *PowerSettingRegister*Notification runs on a new thread
-		if ((this.pwrAcNotifyHandle := DllCall("RegisterPowerSettingNotification", "Ptr", A_ScriptHwnd, "Ptr", AutoHotBrightness._GUID_ACDC_POWER_SOURCE(), "UInt", DEVICE_NOTIFY_WINDOW_HANDLE := 0x00000000, "Ptr")))
+		if ((this.pwrAcNotifyHandle := DllCall("RegisterPowerSettingNotification", "Ptr", A_ScriptHwnd, "Ptr", BrightnessController._GUID_ACDC_POWER_SOURCE(), "UInt", DEVICE_NOTIFY_WINDOW_HANDLE := 0x00000000, "Ptr")))
 			OnMessage(this._WM_POWERBROADCAST, ((this.pwrBroadcastFunc := ObjBindMethod(this, "_On_WM_POWERBROADCAST"))))
 	}
 
 	__Delete() {
 		if (this.pwrAcNotifyHandle) {
-			OnMessage(AutoHotBrightness._WM_POWERBROADCAST, this.pwrBroadcastFunc, 0),
+			OnMessage(BrightnessController._WM_POWERBROADCAST, this.pwrBroadcastFunc, 0),
 			DllCall("UnregisterPowerSettingNotification", "Ptr", this.pwrAcNotifyHandle),
 			this.pwrAcNotifyHandle := 0,
 			this.pwrBroadcastFunc := ""
@@ -24,37 +24,37 @@ class AutoHotBrightness {
 
 	GetBrightnessLevel(autoDcOrAc := -1, ptrAnotherScheme := 0) {
 		currSchemeGuid := 0
-		AutoHotBrightness._GetCurrentSchemeGuid(currSchemeGuid, AC, autoDcOrAc, ptrAnotherScheme)
+		BrightnessController._GetCurrentSchemeGuid(currSchemeGuid, AC, autoDcOrAc, ptrAnotherScheme)
 		if (!currSchemeGuid)
 			return -1
 		ret := 0
-		if (!AutoHotBrightness._GetCurrentBrightnessLevel(currSchemeGuid, AC, ret))
+		if (!BrightnessController._GetCurrentBrightnessLevel(currSchemeGuid, AC, ret))
 			ret := -1
 		DllCall("LocalFree", "Ptr", currSchemeGuid, "Ptr")
 		return ret
 	}
 
 	SetBrightnessLevel(value, jump := false, showOSD := true, autoDcOrAc := -1, ptrAnotherScheme := 0) {
-		static PowerSetActiveScheme := DllCall("GetProcAddress", "Ptr", AutoHotBrightness.hPowrprofMod, "AStr", "PowerSetActiveScheme", "Ptr"),
-		       PowerWriteACValueIndex := DllCall("GetProcAddress", "Ptr", AutoHotBrightness.hPowrprofMod, "AStr", "PowerWriteACValueIndex", "Ptr"),
-		       PowerWriteDCValueIndex := DllCall("GetProcAddress", "Ptr", AutoHotBrightness.hPowrprofMod, "AStr", "PowerWriteDCValueIndex", "Ptr"),
-		       PowerApplySettingChanges := DllCall("GetProcAddress", "Ptr", AutoHotBrightness.hPowrprofMod, "AStr", "PowerApplySettingChanges", "Ptr")
+		static PowerSetActiveScheme := DllCall("GetProcAddress", "Ptr", BrightnessController.hPowrprofMod, "AStr", "PowerSetActiveScheme", "Ptr"),
+		       PowerWriteACValueIndex := DllCall("GetProcAddress", "Ptr", BrightnessController.hPowrprofMod, "AStr", "PowerWriteACValueIndex", "Ptr"),
+		       PowerWriteDCValueIndex := DllCall("GetProcAddress", "Ptr", BrightnessController.hPowrprofMod, "AStr", "PowerWriteDCValueIndex", "Ptr"),
+		       PowerApplySettingChanges := DllCall("GetProcAddress", "Ptr", BrightnessController.hPowrprofMod, "AStr", "PowerApplySettingChanges", "Ptr")
 
 		if (value == 0 && !jump) {
 			if (showOSD)
-				OSD.ShowBrightnessOSD()
+				WinOSD.ShowBrightnessOSD()
 			return
 		}
 
 		currSchemeGuid := 0
-		AutoHotBrightness._GetCurrentSchemeGuid(currSchemeGuid, AC, autoDcOrAc, ptrAnotherScheme)
+		BrightnessController._GetCurrentSchemeGuid(currSchemeGuid, AC, autoDcOrAc, ptrAnotherScheme)
 		if (!currSchemeGuid)
 			return
 
 		currBrightness := 0
-		if (jump || AutoHotBrightness._GetCurrentBrightnessLevel(currSchemeGuid, AC, currBrightness)) {
-			minBrightness := AutoHotBrightness.GetMinBrightnessLevel(),
-			maxBrightness := AutoHotBrightness.GetMaxBrightnessLevel()
+		if (jump || BrightnessController._GetCurrentBrightnessLevel(currSchemeGuid, AC, currBrightness)) {
+			minBrightness := BrightnessController.GetMinBrightnessLevel(),
+			maxBrightness := BrightnessController.GetMaxBrightnessLevel()
 			
 			if (jump || !((currBrightness == maxBrightness && value > 0) || (currBrightness == minBrightness && value < minBrightness))) {
 				if (currBrightness + value > maxBrightness)
@@ -64,35 +64,35 @@ class AutoHotBrightness {
 				else
 					value += currBrightness
 
-				if (DllCall(AC ? PowerWriteACValueIndex : PowerWriteDCValueIndex, "Ptr", 0, "Ptr", currSchemeGuid, "Ptr", AutoHotBrightness._GUID_VIDEO_SUBGROUP(), "Ptr", AutoHotBrightness._GUID_DEVICE_POWER_POLICY_VIDEO_BRIGHTNESS(), "UInt", value, "UInt") == 0) {
+				if (DllCall(AC ? PowerWriteACValueIndex : PowerWriteDCValueIndex, "Ptr", 0, "Ptr", currSchemeGuid, "Ptr", BrightnessController._GUID_VIDEO_SUBGROUP(), "Ptr", BrightnessController._GUID_DEVICE_POWER_POLICY_VIDEO_BRIGHTNESS(), "UInt", value, "UInt") == 0) {
 					; PowerApplySettingChanges is undocumented and exists only in Windows 8+. Since both the Power control panel and the brightness slider use this, we'll do the same, but fallback to PowerSetActiveScheme if on Windows 7 or something
-					if (!PowerApplySettingChanges || DllCall(PowerApplySettingChanges, "Ptr", AutoHotBrightness._GUID_VIDEO_SUBGROUP(), "Ptr", AutoHotBrightness._GUID_DEVICE_POWER_POLICY_VIDEO_BRIGHTNESS(), "UInt") != 0)
+					if (!PowerApplySettingChanges || DllCall(PowerApplySettingChanges, "Ptr", BrightnessController._GUID_VIDEO_SUBGROUP(), "Ptr", BrightnessController._GUID_DEVICE_POWER_POLICY_VIDEO_BRIGHTNESS(), "UInt") != 0)
 						DllCall(PowerSetActiveScheme, "Ptr", 0, "Ptr", currSchemeGuid, "UInt")
 				}
 			}
 
 			if (showOSD)
-				OSD.ShowBrightnessOSD()
+				WinOSD.ShowBrightnessOSD()
 		}
 
 		DllCall("LocalFree", "Ptr", currSchemeGuid, "Ptr")
 	}
 
 	GetStepSize() {
-		return AutoHotBrightness._stepSize
+		return BrightnessController._stepSize
 	}
 
 	SetStepSize(value) {
 		if (value > 0)
-			AutoHotBrightness._stepSize := value
+			BrightnessController._stepSize := value
 	}
 
 	StepUp(showOSD := true) {
-		AutoHotBrightness.SetBrightnessLevel(+AutoHotBrightness._stepSize, false, showOSD)
+		BrightnessController.SetBrightnessLevel(+BrightnessController._stepSize, false, showOSD)
 	}
 
 	StepDown(showOSD := true) {
-		AutoHotBrightness.SetBrightnessLevel(-AutoHotBrightness._stepSize, false, showOSD)
+		BrightnessController.SetBrightnessLevel(-BrightnessController._stepSize, false, showOSD)
 	}
 
 	GetAcStatus(ByRef acStatus) {
@@ -108,34 +108,34 @@ class AutoHotBrightness {
 
 	GetDefaultBrightnessIncrement() {
 		static ret := 10
-		DllCall("powrprof\PowerReadValueIncrement", "Ptr", AutoHotBrightness._GUID_VIDEO_SUBGROUP(), "Ptr", AutoHotBrightness._GUID_DEVICE_POWER_POLICY_VIDEO_BRIGHTNESS(), "UInt*", ret, "UInt")
+		DllCall("powrprof\PowerReadValueIncrement", "Ptr", BrightnessController._GUID_VIDEO_SUBGROUP(), "Ptr", BrightnessController._GUID_DEVICE_POWER_POLICY_VIDEO_BRIGHTNESS(), "UInt*", ret, "UInt")
 		return ret
 	}
 
 	GetMinBrightnessLevel() {
 		static ret := -1
-		if (ret == -1 && DllCall("powrprof\PowerReadValueMin", "Ptr", AutoHotBrightness._GUID_VIDEO_SUBGROUP(), "Ptr", AutoHotBrightness._GUID_DEVICE_POWER_POLICY_VIDEO_BRIGHTNESS(), "UInt*", ret, "UInt"))
+		if (ret == -1 && DllCall("powrprof\PowerReadValueMin", "Ptr", BrightnessController._GUID_VIDEO_SUBGROUP(), "Ptr", BrightnessController._GUID_DEVICE_POWER_POLICY_VIDEO_BRIGHTNESS(), "UInt*", ret, "UInt"))
 			ret := 0
 		return ret
 	}
 
 	GetMaxBrightnessLevel() {
 		static ret := -1
-		if (ret == -1 && DllCall("powrprof\PowerReadValueMax", "Ptr", AutoHotBrightness._GUID_VIDEO_SUBGROUP(), "Ptr", AutoHotBrightness._GUID_DEVICE_POWER_POLICY_VIDEO_BRIGHTNESS(), "UInt*", ret, "UInt"))
+		if (ret == -1 && DllCall("powrprof\PowerReadValueMax", "Ptr", BrightnessController._GUID_VIDEO_SUBGROUP(), "Ptr", BrightnessController._GUID_DEVICE_POWER_POLICY_VIDEO_BRIGHTNESS(), "UInt*", ret, "UInt"))
 			ret := 100
 		return ret
 	}
 
 	_GetCurrentSchemeGuid(ByRef currSchemeGuid, ByRef AC, autoDcOrAc := -1, ptrAnotherScheme := 0) {
-		static PowerGetActiveScheme := DllCall("GetProcAddress", "Ptr", AutoHotBrightness.hPowrprofMod, "AStr", "PowerGetActiveScheme", "Ptr")
+		static PowerGetActiveScheme := DllCall("GetProcAddress", "Ptr", BrightnessController.hPowrprofMod, "AStr", "PowerGetActiveScheme", "Ptr")
 
 		currSchemeGuid := 0
 		AC := false
 		if (!ptrAnotherScheme ? DllCall(PowerGetActiveScheme, "Ptr", 0, "Ptr*", currSchemeGuid, "UInt") == 0 : DllCall("powrprof\PowerDuplicateScheme", "Ptr", 0, "Ptr", ptrAnotherScheme, "Ptr*", currSchemeGuid, "UInt") == 0) {
 			if (autoDcOrAc == -1) {
-				if (this != AutoHotBrightness)
+				if (this != BrightnessController)
 					AC := this._AC
-				else if (!AutoHotBrightness.GetAcStatus(AC)) {
+				else if (!BrightnessController.GetAcStatus(AC)) {
 					DllCall("LocalFree", "Ptr", currSchemeGuid, "Ptr")
 					currSchemeGuid := 0
 					AC := false
@@ -147,14 +147,14 @@ class AutoHotBrightness {
 	}
 
 	_GetCurrentBrightnessLevel(schemeGuid, AC, ByRef currBrightness) {
-		static PowerReadACValueIndex := DllCall("GetProcAddress", "Ptr", AutoHotBrightness.hPowrprofMod, "AStr", "PowerReadACValueIndex", "Ptr"),
-		       PowerReadDCValueIndex := DllCall("GetProcAddress", "Ptr", AutoHotBrightness.hPowrprofMod, "AStr", "PowerReadDCValueIndex", "Ptr")
-		return DllCall(AC ? PowerReadACValueIndex : PowerReadDCValueIndex, "Ptr", 0, "Ptr", schemeGuid, "Ptr", AutoHotBrightness._GUID_VIDEO_SUBGROUP(), "Ptr", AutoHotBrightness._GUID_DEVICE_POWER_POLICY_VIDEO_BRIGHTNESS(), "UInt*", currBrightness, "UInt") == 0
+		static PowerReadACValueIndex := DllCall("GetProcAddress", "Ptr", BrightnessController.hPowrprofMod, "AStr", "PowerReadACValueIndex", "Ptr"),
+		       PowerReadDCValueIndex := DllCall("GetProcAddress", "Ptr", BrightnessController.hPowrprofMod, "AStr", "PowerReadDCValueIndex", "Ptr")
+		return DllCall(AC ? PowerReadACValueIndex : PowerReadDCValueIndex, "Ptr", 0, "Ptr", schemeGuid, "Ptr", BrightnessController._GUID_VIDEO_SUBGROUP(), "Ptr", BrightnessController._GUID_DEVICE_POWER_POLICY_VIDEO_BRIGHTNESS(), "UInt*", currBrightness, "UInt") == 0
 	}
 
 	_On_WM_POWERBROADCAST(wParam, lParam) {
 		;OutputDebug % &this
-		if (wParam == 0x8013 && lParam && NumGet(lParam+0, 0, "UInt") == NumGet(AutoHotBrightness._GUID_ACDC_POWER_SOURCE()+0, 0, "UInt")) {
+		if (wParam == 0x8013 && lParam && NumGet(lParam+0, 0, "UInt") == NumGet(BrightnessController._GUID_ACDC_POWER_SOURCE()+0, 0, "UInt")) {
 			; PBT_POWERSETTINGCHANGE and a lazy comparison
 			this._AC := NumGet(lParam+0, 20, "UChar") == 0
 			return true

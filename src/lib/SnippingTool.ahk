@@ -1,4 +1,4 @@
-class AutoHotScreenshot {
+class SnippingTool {
 
 	Launch() {
 		Run SnippingTool
@@ -7,30 +7,30 @@ class AutoHotScreenshot {
 	}
 
 	NewCapture() {
-		AutoHotScreenshot.Launch()
+		SnippingTool.Launch()
 		Send ^n
 	}
 
 	FreeForm() {
-		AutoHotScreenshot.Launch()
+		SnippingTool.Launch()
 		Send !m
 		Send f
 	}
 
 	Rectangular() {
-		AutoHotScreenshot.Launch()
+		SnippingTool.Launch()
 		Send !m
 		Send r
 	}
 
 	Window() {
-		AutoHotScreenshot.Launch()
+		SnippingTool.Launch()
 		Send !m
 		Send w
 	}
 
 	FullScreen() {
-		AutoHotScreenshot.Launch()
+		SnippingTool.Launch()
 		Send !m
 		Send s
 	}

@@ -1,4 +1,4 @@
-class AutoHotScroller {
+class InertialScroller {
 	minElapsed      := 10  ; Min elapsed time that will be parsed (because there were cases when the time was 0)
 	maxElapsed      := 100 ; Max elapsed time that will be parsed
 	notchDistance   := 100 ; Virtual distance one scroll notch represents
