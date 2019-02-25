@@ -4,3 +4,6 @@
 # Binary files
 *.dll
 *.exe
+
+# Folders
+/bin

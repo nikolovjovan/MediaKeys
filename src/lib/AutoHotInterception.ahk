@@ -1,4 +1,4 @@
-#include %A_LineFile%\..\CLR.ahk
+#include %A_ScriptDir%\lib\CLR.ahk
 
 class AutoHotInterception {
 	_contextManagers := {}

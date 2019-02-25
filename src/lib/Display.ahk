@@ -1,3 +1,5 @@
+#include %A_ScriptDir%\lib\Windows.ahk
+
 class Display {
 	; Based on https://github.com/qwerty12/AutoHotkeyScripts/tree/master/LaptopBrightnessSetter
 	static _WM_POWERBROADCAST := 0x218, hPowrprofMod := DllCall("LoadLibrary", "Str", "powrprof.dll", "Ptr")
@@ -110,6 +112,58 @@ class Display {
 			return true
 		}
 		return false
+	}
+
+	ShowBrightnessOSD() {
+		; Thanks to YashMaster @ https://github.com/YashMaster/Tweaky/blob/master/Tweaky/BrightnessHandler.h for realising this could be done:
+		Windows._ShowOSD(0x37, 0)
+	}
+
+	ShowBrightnessLevel(visible := true) {
+		static value := ""
+		static shown := false
+		if (!visible) {
+			SetTimer, Updater, Off
+			Progress, Off
+			shown := false
+			return
+		}
+		newValue := Display.GetBrightness()
+		if (!shown) {
+			value := newValue
+			Progress, B H30 W65 X62 Y250 ZH0 ZX5 ZY0 FS10 WS500 CTWhite CW101010, %value%
+		} else if (newValue != value) {
+			value := newValue
+			Progress, , %value%
+		}
+		WinSet, Transparent, 240, ahk_class AutoHotkey2
+		SetTimer, Updater, 10
+		shown := true
+		return
+	
+	Updater:
+		hwnd := Windows._osdHwnd
+		alpha := 0
+		if (hwnd)
+			WinGet, alpha, Transparent, ahk_id %hwnd%
+		alpha := alpha * 240 // 255 - (alpha == 255 ? 0 : 6)
+		if (alpha > 0) {
+			WinSet, Transparent, %alpha%, ahk_class AutoHotkey2
+			newValue := Display.GetBrightness()
+			if (newValue != value) {
+				value := newValue
+				Progress, , %value%
+			}
+		} else {
+			Progress, Off
+			SetTimer, Updater, Off
+			shown := false
+		}
+		return
+	}
+
+	HideBrightnessLevel() {
+		Display.ShowBrightnessLevel(false)
 	}
 
 	_GetCurrentSchemeGuid(ByRef currSchemeGuid, ByRef AC, autoDcOrAc := -1, ptrAnotherScheme := 0) {

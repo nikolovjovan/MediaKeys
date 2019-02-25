@@ -1,3 +1,5 @@
+#include %A_ScriptDir%\lib\Windows.ahk
+
 class Sound {
 	static _volume := 0, _increment := 2
 
@@ -77,5 +79,10 @@ class Sound {
 			Sound.Unmute()
 		else
 			Sound.Mute()
+	}
+	
+	ShowVolumeOSD() {
+		; Thanks to YashMaster @ https://github.com/YashMaster/Tweaky/blob/master/Tweaky/VolumeHandler.h for realising this could be done:
+		Windows._ShowOSD(0xC, 0xA0000)
 	}
 }

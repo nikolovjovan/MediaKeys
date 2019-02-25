@@ -71,39 +71,6 @@ class Windows {
 		KeyWait %A_ThisHotkey%
 	}
 
-	ShowBrightnessOSD() {
-		; Thanks to YashMaster @ https://github.com/YashMaster/Tweaky/blob/master/Tweaky/BrightnessHandler.h for realising this could be done:
-		Windows._ShowOSD(0x37, 0)
-	}
-
-	ShowVolumeOSD() {
-		; Thanks to YashMaster @ https://github.com/YashMaster/Tweaky/blob/master/Tweaky/VolumeHandler.h for realising this could be done:
-		Windows._ShowOSD(0xC, 0xA0000)
-	}
-
-	ShowPercentageUnderOSD(value) {
-		static shown := false
-		if (value == -1) {
-			SetTimer, PercentageOff, Off
-			Progress, Off
-			shown := false
-			return
-		}
-		if (!shown)
-			Progress, B W65 X62 Y260 ZH0 ZX5 ZY5 FS10 WS500 CTWhite CWBlack, %value%
-		else
-			Progress, , %value%
-		SetTimer PercentageOff, 2000
-		shown := true
-		return
-
-	PercentageOff:
-		SetTimer, PercentageOff, Off
-		Progress, Off
-		shown := false
-		return
-	}
-
 	_GetWindowLocation(windowHandle, areaX, areaY, areaW, areaH, ByRef horizontal, ByRef vertical, ByRef offset) {
 		horizontal         := "",
 		vertical           := "",

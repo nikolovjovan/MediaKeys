@@ -15,7 +15,7 @@ SetWorkingDir %A_ScriptDir%              ; Ensures a consistent starting directo
 #include lib\Display.ahk                 ; Library used to provide brightness control
 #include lib\SnippingTool.ahk            ; Library used to provide screenshots using Snipping Tool with various options
 #include lib\Sound.ahk                   ; Library used to provide volume control
-#include lib\Windows.ahk                 ; Library used to provide calls to Windows' brightness and volume OSD
+#include lib\Windows.ahk                 ; Library used to provide various functions for Windows
 
 ; ---- Constants ----
 
@@ -128,9 +128,9 @@ WheelVerticalEventHandler(state) {
 		else
 			Display.BrightnessStepDown()
 		if (ShowOSD) {
-			Windows.ShowBrightnessOSD()
+			Display.ShowBrightnessOSD()
 			if (ShowBrightnessLevel)
-				Windows.ShowPercentageUnderOSD(Display.GetBrightness())
+				Display.ShowBrightnessLevel()
 		}
 	} else if (XButton2Down) {
 		if (XButton2Enabled)
@@ -141,9 +141,9 @@ WheelVerticalEventHandler(state) {
 		else
 			Sound.VolumeStepDown()
 		if (ShowOSD) {
-			Windows.ShowVolumeOSD()
+			Sound.ShowVolumeOSD()
 			if (ShowBrightnessLevel)
-				Windows.ShowPercentageUnderOSD(-1) ; Hide brightness percentage
+				Display.HideBrightnessLevel()
 		}
 	} else {
 		btn := state == 1 ? "WheelUp" : "WheelDown"
@@ -197,9 +197,9 @@ ChangeBrightness(increase, jump) {
 	else
 		Display.BrightnessStepDown()
 	if (ShowOSD) {
-		Windows.ShowBrightnessOSD()
+		Display.ShowBrightnessOSD()
 		if (ShowBrightnessLevel)
-			Windows.ShowPercentageUnderOSD(Display.GetBrightness())
+			Display.ShowBrightnessLevel()
 	}
 }
 
@@ -225,9 +225,9 @@ ChangeVolume(increase, jump) {
 	else
 		Sound.VolumeStepDown()
 	if (ShowOSD) {
-		Windows.ShowVolumeOSD()
+		Sound.ShowVolumeOSD()
 		if (ShowBrightnessLevel)
-			Windows.ShowPercentageUnderOSD(-1) ; Hide brightness percentage
+			Display.HideBrightnessLevel()
 	}
 }
 
