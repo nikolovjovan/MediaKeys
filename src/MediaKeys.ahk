@@ -1,9 +1,9 @@
 #NoEnv                                   ; Recommended for performance and compatibility with future AutoHotkey releases
-;#NoTrayIcon                             ; Disable the tray icon (we don't need it anyways)
-#Warn                                    ; Enable warnings to assist with detecting common errors
+#NoTrayIcon                              ; Disable the tray icon (we don't need it anyways)
+; #Warn                                    ; Enable warnings to assist with detecting common errors
 #SingleInstance force                    ; Allow only one instance to be run at one time
 #Persistent                              ; Keep the script running until it is explicitly closed
-#MaxHotkeysPerInterval 100               ; Limit the number of hotkeys per interval
+#MaxHotkeysPerInterval 200               ; Limit the number of hotkeys per interval
 
 Process, Priority, , H                   ; Launch the script with High CPU priority
 SendMode Input                           ; Recommended for new scripts due to its superior speed and reliability
@@ -11,42 +11,45 @@ SetWorkingDir %A_ScriptDir%              ; Ensures a consistent starting directo
 
 ; ---- Includes ----
 
-#include lib\AutoHotInterception.ahk     ; Library used to provide access to Interception driver
-#include lib\BrightnessController.ahk    ; Library used to provide brightness control
-#include lib\InertialScroller.ahk        ; Library used to provide kinetic strolling
+#include lib\AutoHotInterception.ahk     ; Library used to provide access to the Interception driver
+#include lib\Display.ahk                 ; Library used to provide brightness control
 #include lib\SnippingTool.ahk            ; Library used to provide screenshots using Snipping Tool with various options
-#include lib\VolumeController.ahk        ; Library used to provide volume control
+#include lib\Sound.ahk                   ; Library used to provide volume control
+#include lib\Windows.ahk                 ; Library used to provide calls to Windows' brightness and volume OSD
 
 ; ---- Constants ----
 
 ; -- Mutable Constants --
 
-global DoubleTapTimeout        := 100    ; Specifies the double tap timeout (used for brightness and volume control)
-global ScrollSpeed             := 1      ; Specifies default scroll speed which will be applied at script startup
-global ShowBrightnessTooltip   := true   ; Specifies whether to show brightness percentage underneath the Windows 10 OSD
-global ShowVolumeTooltip       := false  ; Specifies whether to show volume percentage underneath the Windows 10 OSD
-global ShowWinOSD              := true   ; Specifies whether to show Windows 10 OSD for brightness and volume control
+global BrightnessIncrement     := 2      ; Brightness increment (Lenovo Y700 only has 50 brightness levels so by default this is 2)
+global VolumeIncrement         := 1      ; Volume increment (bypass the default increment of 2 for finer grained control)
+
+global WheelScrollLines        := 3      ; Vertical scroll speed which will be used for mouse wheel scrolling
+global WheelScrollChars        := 3      ; Horizontal scroll speed which will be used for mouse wheel scrolling
+
+global BallScrollLines         := 1      ; Vertical scroll speed which will be used for trackball scrolling
+global BallScrollChars         := 1      ; Horizontal scroll speed which will be used for trackball scrolling
+
+global BallScrollDeadzone      := 10     ; Distance needed to move the trackball in order to send one mouse scroll event
+
+global ShowOSD                 := true   ; Specifies whether to show Windows OSD for brightness and volume control (available only on Windows 8+)
+global ShowBrightnessLevel     := true   ; Specifies whether to show brightness level underneath the Windows 10 OSD (visible only if ShowOSD is true)
 
 ; -- Unmutable Constants --
 
 global WM_DEVICECHANGE         := 0x0219 ; Windows Message device change
 global DBT_DEVNODES_CHANGED    := 0x0007 ; Windows Event device nodes changed
-global SPI_SETWHEELSCROLLCHARS := 0x006D ; SystemParametersInfo uiAction Input Parameter
+global SPI_GETWHEELSCROLLLINES := 0x0068 ; SystemParametersInfo uiAction Input Parameter
 global SPI_SETWHEELSCROLLLINES := 0x0069 ; SystemParametersInfo uiAction Input Parameter
+global SPI_GETWHEELSCROLLCHARS := 0x006C ; SystemParametersInfo uiAction Input Parameter
+global SPI_SETWHEELSCROLLCHARS := 0x006D ; SystemParametersInfo uiAction Input Parameter
 global SPIF_SENDCHANGE         := 0x0002 ; SystemParametersInfo fWinIni Parameter
 
 ; ---- Variables ----
 
-; -- Interception Variables --
-
 global Interception            := new AutoHotInterception().GetInstance()
 global MouseHandle             := "HID\VID_046D&PID_C52B&REV_2407&MI_02&Qid_1028&WI_01&Class_00000004" ; Logitech M570
 global MouseId                 := 0 ; Interception Mouse Id
-
-; -- Modifier Keys Variables --
-
-global RButtonDown             := false
-global RButtonEnabled          := true
 
 global XButton1Down            := false
 global XButton1Enabled         := true
@@ -57,10 +60,10 @@ global XButton2Enabled         := true
 global AppsKeyEnabled          := true
 global ReleaseLWin             := false
 
-; -- Other Variables --
+global CursorHidden            := false
 
-global BrightnessBeforeJump    := -1 ; Stores current brightness before jump
-global VolumeBeforeJump        := -1 ; Stores current volume before jump
+global DistanceX               := 0
+global DistanceY               := 0
 
 ; ---- Functions ----
 
@@ -71,72 +74,205 @@ DeviceChange(wParam, lParam, msg, hwnd) {
 
 TryInitializeInterception() {
 	MouseId := Interception.GetMouseIdFromHandle(MouseHandle)
-	if (MouseId > 0) {
-		Interception.SubscribeMouseButton(MouseId, 1, true, Func("RButtonEventHandler"))
-		Interception.SubscribeMouseButton(MouseId, 3, true, Func("XButton1EventHandler"))
-		Interception.SubscribeMouseButton(MouseId, 4, true, Func("XButton2EventHandler"))
-		Interception.SubscribeMouseButton(MouseId, 5, true, Func("WheelVerticalEventHandler"))
-	}
+	if (MouseId < 11 || MouseId > 20)
+		return
+	Interception.SubscribeMouseButton(MouseId, 3, true, Func("XButton1EventHandler"))
+	Interception.SubscribeMouseButton(MouseId, 4, true, Func("XButton2EventHandler"))
+	Interception.SubscribeMouseButton(MouseId, 5, true, Func("WheelVerticalEventHandler"))
 }
 
-RButtonEventHandler(state) {
-	if (!RButtonDown := state) {
-		if (RButtonEnabled)
-			Send {RButton}
-		else
-			RButtonEnabled := true
-	}
+TryUnsubscribeInterception() {
+	if (MouseId < 11 || MouseId > 20)
+		return
+	Interception.UnsubscribeMouseButton(MouseId, 3)
+	Interception.UnsubscribeMouseButton(MouseId, 4)
+	Interception.UnsubscribeMouseButton(MouseId, 5)
+	Interception.UnsubscribeMouseMove(MouseId)
 }
 
 XButton1EventHandler(state) {
 	if (!XButton1Down := state) {
+		if (MouseId > 10 || MouseId <= 20)
+			Interception.UnsubscribeMouseMove(MouseId)
 		if (XButton1Enabled)
 			Send {Browser_Back}
-		else
+		else {
 			XButton1Enabled := true
-	}
+			ShowCursor()
+		}
+	} else if (MouseId > 10 || MouseId <= 20)
+		Interception.SubscribeMouseMove(MouseId, true, Func("BallScrollHorizontal"))
 }
 
 XButton2EventHandler(state) {
 	if (!XButton2Down := state) {
+		if (MouseId > 10 || MouseId <= 20)
+			Interception.UnsubscribeMouseMove(MouseId)
 		if (XButton2Enabled)
 			Send {Browser_Forward}
-		else
+		else {
 			XButton2Enabled := true
-	}
+			ShowCursor()
+		}
+	} else if (MouseId > 10 || MouseId <= 20)
+		Interception.SubscribeMouseMove(MouseId, true, Func("BallScrollVertical"))
 }
 
 WheelVerticalEventHandler(state) {
 	if (XButton1Down) {
-		XButton1Enabled := false
+		if (XButton1Enabled)
+			XButton1Enabled := false
+		ShowCursor()
 		if (state == 1)
-			BrightnessController.StepUp(ShowWinOSD)
+			Display.BrightnessStepUp()
 		else
-			BrightnessController.StepDown(ShowWinOSD)
-		BrightnessTooltip()
+			Display.BrightnessStepDown()
+		if (ShowOSD) {
+			Windows.ShowBrightnessOSD()
+			if (ShowBrightnessLevel)
+				Windows.ShowPercentageUnderOSD(Display.GetBrightness())
+		}
 	} else if (XButton2Down) {
-		XButton2Enabled := false
+		if (XButton2Enabled)
+			XButton2Enabled := false
+		ShowCursor()
 		if (state == 1)
-			VolumeController.StepUp(ShowWinOSD)
+			Sound.VolumeStepUp()
 		else
-			VolumeController.StepDown(ShowWinOSD)
-		VolumeTooltip()
-	} else if (RButtonDown) {
-		RButtonEnabled := false
-		if (state == 1)
-			Interception.SendMouseButtonEvent(MouseId, 6, -1)
-			; AutoHotScroller.Scroll("WheelLeft")
-		else
-			Interception.SendMouseButtonEvent(MouseId, 6, 1)
-			; AutoHotScroller.Scroll("WheelRight")
+			Sound.VolumeStepDown()
+		if (ShowOSD) {
+			Windows.ShowVolumeOSD()
+			if (ShowBrightnessLevel)
+				Windows.ShowPercentageUnderOSD(-1) ; Hide brightness percentage
+		}
 	} else {
-		if (state == 1)
-			Interception.SendMouseButtonEvent(MouseId, 5, 1)
-			; AutoHotScroller.Scroll("WheelUp")
-		else
-			Interception.SendMouseButtonEvent(MouseId, 5, -1)
-			; AutoHotScroller.Scroll("WheelDown")
+		btn := state == 1 ? "WheelUp" : "WheelDown"
+		MouseClick %btn%,,, %WheelScrollLines%
 	}
+}
+
+BallScrollHorizontal(x, y) {
+	if (XButton1Enabled)
+		XButton1Enabled := false
+	HideCursor()
+	btn := x > 0 ? "WheelRight" : "WheelLeft"
+	DistanceX += x
+	dist := abs(DistanceX) // BallScrollDeadzone
+	DistanceX -= (DistanceX > 0 ? 1 : -1) * dist * BallScrollDeadzone
+	MouseClick %btn%,,,%dist%
+	SetTimer ShowCursor, 500
+}
+
+BallScrollVertical(x, y) {
+	if (XButton2Enabled)
+		XButton2Enabled := false
+	HideCursor()
+	btn := y > 0 ? "WheelDown" : "WheelUp"
+	DistanceY += y
+	dist := abs(DistanceY) // BallScrollDeadzone
+	DistanceY -= (DistanceY > 0 ? 1 : -1) * dist * BallScrollDeadzone
+	MouseClick %btn%,,,%dist%
+	SetTimer ShowCursor, 500
+}
+
+ChangeBrightness(increase, jump) {
+	static previous := ""
+	AppsKeyEnabled := false
+	if (jump) {
+		current := Display.GetBrightness()
+		if (increase && current < Display.GetMaxBrightness() || !increase && current > Display.GetMinBrightness()) {
+			if (previous != "" && (current == Display.GetMinBrightness() || current == Display.GetMaxBrightness())) {
+				Display.SetBrightness(previous, true)
+				previous := ""
+			} else {
+				previous := current
+				if (increase)
+					Display.SetBrightness(Display.GetMaxBrightness(), true)
+				else
+					Display.SetBrightness(Display.GetMinBrightness(), true)
+			}
+		}
+	} else if (increase)
+		Display.BrightnessStepUp()
+	else
+		Display.BrightnessStepDown()
+	if (ShowOSD) {
+		Windows.ShowBrightnessOSD()
+		if (ShowBrightnessLevel)
+			Windows.ShowPercentageUnderOSD(Display.GetBrightness())
+	}
+}
+
+ChangeVolume(increase, jump) {
+	static previous := ""
+	AppsKeyEnabled := false
+	if (jump) {
+		current := Sound.GetVolume()
+		if (increase && current < Sound.GetMaxVolume() || !increase && current > Sound.GetMinVolume()) {
+			if (previous != "" && (current == Sound.GetMinVolume() || current == Sound.GetMaxVolume())) {
+				Sound.SetVolume(previous, true)
+				previous := ""
+			} else {
+				previous := current
+				if (increase)
+					Sound.SetVolume(Sound.GetMaxVolume(), true)
+				else
+					Sound.SetVolume(Sound.GetMinVolume(), true)
+			}
+		}
+	} else if (increase)
+		Sound.VolumeStepUp()
+	else
+		Sound.VolumeStepDown()
+	if (ShowOSD) {
+		Windows.ShowVolumeOSD()
+		if (ShowBrightnessLevel)
+			Windows.ShowPercentageUnderOSD(-1) ; Hide brightness percentage
+	}
+}
+
+; Function from the AHK documentation @ https://autohotkey.com/docs/commands/DllCall.htm
+SystemCursor(OnOff := 1) {  ; INIT = "I", "Init"; OFF = 0, "Off"; TOGGLE = -1, "T", "Toggle"; ON = others
+    static AndMask, XorMask, $, h_cursor
+        , c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13 ; system cursors
+        , b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13     ; blank cursors
+        , h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13     ; handles of default cursors
+    if (OnOff = "Init" || OnOff = "I" || $ = "") { ; init when requested or at first call
+        $ = h                                      ; active default cursors
+        VarSetCapacity(h_cursor, 4444, 1)
+        VarSetCapacity(AndMask, 32 * 4, 0xFF)
+        VarSetCapacity(XorMask, 32 * 4, 0)
+        system_cursors = 32512, 32513, 32514, 32515, 32516, 32642, 32643, 32644, 32645, 32646, 32648, 32649, 32650
+        StringSplit c, system_cursors, `,
+        Loop %c0% {
+            h_cursor   := DllCall("LoadCursor", "Ptr", 0, "Ptr", c%A_Index%)
+            h%A_Index% := DllCall("CopyImage", "Ptr", h_cursor, "UInt", 2, "Int", 0, "Int", 0, "UInt", 0)
+            b%A_Index% := DllCall("CreateCursor", "Ptr", 0, "Int", 0, "Int", 0
+                , "Int", 32, "Int", 32, "Ptr", &AndMask, "Ptr", &XorMask)
+        }
+    }
+    if (OnOff = 0 || OnOff = "Off" || $ = "h" && (OnOff < 0 || OnOff = "Toggle" || OnOff = "T"))
+        $ = b ; use blank cursors
+    else
+        $ = h ; use the saved cursors
+    Loop %c0% {
+        h_cursor := DllCall("CopyImage", "Ptr", %$%%A_Index%, "UInt", 2, "Int", 0, "Int", 0, "UInt", 0)
+        DllCall("SetSystemCursor", "Ptr", h_cursor, "UInt", c%A_Index%)
+    }
+}
+
+ShowCursor() {
+	if (!CursorHidden)
+		return
+	CursorHidden := false
+	SystemCursor("On")
+}
+
+HideCursor() {
+	if (CursorHidden)
+		return
+	CursorHidden := true
+	SystemCursor("Off")
 }
 
 QuickToolTip(text, delay) {
@@ -150,128 +286,121 @@ QuickToolTip(text, delay) {
 	return
 }
 
-ShowPercentage(value) {
-	static shown := false
-	if (value == -1) {
-		SetTimer, PercentageOff, Off
-		Progress, Off
-		shown := false
-		return
-	}
-	if (!shown)
-		Progress, B W65 H28 X62 Y250 ZH0 ZX5 ZY5 FM9 WM500 CTWhite CWBlack, %value%
-	else
-		Progress, , %value%
-	SetTimer PercentageOff, 2000
-	shown := true
-	return
-
-	PercentageOff:
-	SetTimer, PercentageOff, Off
-	Progress, Off
-	shown := false
-	return
-}
-
-BrightnessTooltip() {
-	if (ShowBrightnessTooltip)
-		ShowPercentage(BrightnessController.GetBrightnessLevel())
-	else
-		ShowPercentage(-1)
-}
-
-VolumeTooltip() {
-	if (ShowVolumeTooltip)
-		ShowPercentage(VolumeController.GetVolumeLevel())
-	else
-		ShowPercentage(-1)
-}
-
 ; ---- Script body ----
-
-; Set mouse scroll speed
-DllCall("SystemParametersInfo", UInt, SPI_SETWHEELSCROLLCHARS, UInt, ScrollSpeed, UInt, 0, UInt, SPIF_SENDCHANGE)
-DllCall("SystemParametersInfo", UInt, SPI_SETWHEELSCROLLLINES, UInt, ScrollSpeed, UInt, 0, UInt, SPIF_SENDCHANGE)
 
 ; Register device change notification and initialize interception
 OnMessage(WM_DEVICECHANGE, "DeviceChange")
 TryInitializeInterception()
 
 ; Initialize brightness and volume step sizes
-BrightnessController.SetStepSize(2)
-VolumeController.SetStepSize(1)
+Display.SetIncrement(BrightnessIncrement)
+Sound.SetIncrement(VolumeIncrement)
+
+; Set default scroll speed to 1 for precise scrolling
+DllCall("SystemParametersInfo", UInt, SPI_SETWHEELSCROLLLINES, UInt, 1, UIntP, 0, UInt, SPIF_SENDCHANGE)
+DllCall("SystemParametersInfo", UInt, SPI_SETWHEELSCROLLCHARS, UInt, 1, UIntP, 0, UInt, SPIF_SENDCHANGE)
+
+OnError(Func("TryUnsubscribeInterception"))
+OnExit(Func("TryUnsubscribeInterception"))
 return
+
+; ---- ShowCursor timer body ----
+
+ShowCursor:
+	ShowCursor()
+	SetTimer ShowCursor, Off
+	return
 
 ; ---- Hotkeys ----
 
 ; AltGr + Arrow Keys -> Media controls
-; AppsKey + Arrow Keys -> Window snapping
+; AppsKey + [RCtrl] + Arrow Keys -> Brightness & Volume controls
+; AppsKey + Numpad Keys -> Window snapping
 ; RCtrl + Arrow Keys -> Windows Explorer navigation
-; RShift + Arrow Keys -> Brightness & Volume controls
 ; AltGr / AppsKey / RCtrl / RShift + PrintScreen -> Various Snipping Tool modes
 
-; -- Media controls --
-
-<^>!Up::
-	Send {Media_Play_Pause Down}
-	KeyWait, Up
-	return
-
-<^>!Up Up::Send {Media_Play_Pause Up}
-
-<^>!Down::
-	Send {Media_Stop Down}
-	KeyWait, Down
-	return
-
-<^>!Down Up::Send {Media_Stop Up}
-
-<^>!Left::
-	Send {Media_Prev Down}
-	KeyWait, Left
-	return
-
-<^>!Left Up::Send {Media_Prev Up}
-
-<^>!Right::
-	Send {Media_Next Down}
-	KeyWait, Right
-	return
-
-<^>!Right Up::Send {Media_Next Up}
-
-#If
-
-; -- Window snapping --
-
-#If GetKeyState("AppsKey", "p")
-Up::
-Down::
-Left::
-Right::
-	AppsKeyEnabled := false
-	ReleaseLWin := true
-	Send {LWin Down}{%A_ThisHotkey%}
-	return
-#If
-
-; AppsKey Up hotkey to allow normal AppsKey usage
+; -- Modifier key --
 
 AppsKey Up::
 	if (AppsKeyEnabled)
 		Send {AppsKey}
-	else {
-		AppsKeyEnabled := true
-		if (ReleaseLWin) {
-			ReleaseLWin := false
-			Send {LWin Up}
-		}
+	else if (ReleaseLWin) {
+		ReleaseLWin := false
+		Send {LWin Up}
 	}
+	AppsKeyEnabled := true
 	return
+
+; -- Media controls --
+
+<^>!Up::
+	Send {Media_Play_Pause}
+	KeyWait, Up
+	return
+<^>!Down::
+	Send {Media_Stop}
+	KeyWait, Down
+	return
+<^>!Left::
+	Send {Media_Prev}
+	KeyWait, Left
+	return
+<^>!Right::
+	Send {Media_Next}
+	KeyWait, Right
+	return
+
+; -- Window snapping --
+
+#if GetKeyState("AppsKey", "p")
+NumpadClear::
+Numpad5::Windows.SnapActiveWindow("", "", AppsKeyEnabled, ReleaseLWin)
+NumpadUp::
+Numpad8::Windows.SnapActiveWindow("", "Up", AppsKeyEnabled, ReleaseLWin)
+NumpadDown::
+Numpad2::Windows.SnapActiveWindow("", "Down", AppsKeyEnabled, ReleaseLWin)
+NumpadLeft::
+Numpad4::Windows.SnapActiveWindow("Left", "", AppsKeyEnabled, ReleaseLWin)
+NumpadRight::
+Numpad6::Windows.SnapActiveWindow("Right", "", AppsKeyEnabled, ReleaseLWin)
+NumpadHome::
+Numpad7::Windows.SnapActiveWindow("Left", "Up", AppsKeyEnabled, ReleaseLWin)
+NumpadEnd::
+Numpad1::Windows.SnapActiveWindow("Left", "Down", AppsKeyEnabled, ReleaseLWin)
+NumpadPgup::
+Numpad9::Windows.SnapActiveWindow("Right", "Up", AppsKeyEnabled, ReleaseLWin)
+NumpadPgdn::
+Numpad3::Windows.SnapActiveWindow("Right", "Down", AppsKeyEnabled, ReleaseLWin)
+#if
+
+; -- Brightness & Volume controls --
+
+#if GetKeyState("AppsKey", "p")
+>^Up::
+	ChangeBrightness(true, true)
+	KeyWait Up
+	return
+>^Down::
+	ChangeBrightness(false, true)
+	KeyWait Down
+	return
+>^Left::
+	ChangeVolume(false, true)
+	KeyWait Left
+	return
+>^Right::
+	ChangeVolume(true, true)
+	KeyWait Right
+	return
+Up::ChangeBrightness(true, false)
+Down::ChangeBrightness(false, false)
+Left::ChangeVolume(false, false)
+Right::ChangeVolume(true, false)
+#if
 
 ; -- Windows Explorer navigation --
 
-#If WinActive("ahk_class CabinetWClass") or WinActive("ahk_class #32770")
+#if WinActive("ahk_class CabinetWClass") || WinActive("ahk_class #32770")
 ; Go up to parent folder when in WindowsExplorer
 ; For some reason SendEvent works whereas Send doesn't
 ; Send opens a new window with parent location instead of
@@ -281,81 +410,7 @@ AppsKey Up::
 >^Down::
 >^Left::Send {Browser_Back}
 >^Right::Send {Browser_Forward}
-#If
-
-; -- Brightness & Volume controls --
-
->+Up::
-	if (A_PriorHotkey == A_ThisHotkey . " Up" && A_TimeSincePriorHotkey <= DoubleTapTimeout) {
-		if (BrightnessController.GetBrightnessLevel() == BrightnessController.GetStepSize()) {
-			if (BrightnessBeforeJump != -1)
-				BrightnessController.SetBrightnessLevel(BrightnessBeforeJump, true)
-			else
-				BrightnessController.SetBrightnessLevel(100, true)
-		} else {
-			BrightnessBeforeJump := BrightnessController.GetBrightnessLevel() - BrightnessController.GetStepSize()
-			BrightnessController.SetBrightnessLevel(100, true)
-		}
-	} else
-		BrightnessController.StepUp(ShowWinOSD)
-	BrightnessTooltip()
-	return
-
->+Up Up::return    ; Create a blank hotkey to generate A_PriorHotkey
-
->+Down::
-	if (A_PriorHotkey == A_ThisHotkey . " Up" && A_TimeSincePriorHotkey <= DoubleTapTimeout) {
-		if (BrightnessController.GetBrightnessLevel() == 100 - BrightnessController.GetStepSize()) {
-			if (BrightnessBeforeJump != -1)
-				BrightnessController.SetBrightnessLevel(BrightnessBeforeJump, true)
-			else
-				BrightnessController.SetBrightnessLevel(0, true)
-		} else {
-			BrightnessBeforeJump := BrightnessController.GetBrightnessLevel() + BrightnessController.GetStepSize()
-			BrightnessController.SetBrightnessLevel(0, true)
-		}
-	} else
-		BrightnessController.StepDown(ShowWinOSD)
-	BrightnessTooltip()
-	return
-
->+Down Up::return  ; Create a blank hotkey to generate A_PriorHotkey
-
->+Right::
-	if (A_PriorHotkey == A_ThisHotkey . " Up" && A_TimeSincePriorHotkey <= DoubleTapTimeout) {
-		if (VolumeController.GetVolumeLevel() == VolumeController.GetStepSize()) {
-			if (VolumeBeforeJump != -1)
-				VolumeController.SetVolumeLevel(VolumeBeforeJump, true)
-			else
-				VolumeController.SetVolumeLevel(100, true)
-		} else {
-			VolumeBeforeJump := VolumeController.GetVolumeLevel() - VolumeController.GetStepSize()
-			VolumeController.SetVolumeLevel(100, true)
-		}
-	} else
-		VolumeController.StepUp(ShowWinOSD)
-	VolumeTooltip()
-	return
-
->+Right Up::return ; Create a blank hotkey to generate A_PriorHotkey
-
->+Left::
-	if (A_PriorHotkey == A_ThisHotkey . " Up" && A_TimeSincePriorHotkey <= DoubleTapTimeout) {
-		if (VolumeController.GetVolumeLevel() == 100 - VolumeController.GetStepSize()) {
-			if (VolumeBeforeJump != -1)
-				VolumeController.SetVolumeLevel(VolumeBeforeJump, true)
-			else
-				VolumeController.SetVolumeLevel(0, true)
-		} else {
-			VolumeBeforeJump := VolumeController.GetVolumeLevel() + VolumeController.GetStepSize()
-			VolumeController.SetVolumeLevel(0, true)
-		}
-	} else
-		VolumeController.StepDown(ShowWinOSD)
-	VolumeTooltip()
-	return
-
->+Left Up::return  ; Create a blank hotkey to generate A_PriorHotkey
+#if
 
 ; -- Screenshot controls --
 
@@ -363,7 +418,7 @@ AppsKey Up::
 >^PrintScreen::SnippingTool.FreeForm()     ; RCtrl & PrintScreen -> Capture FreeForm
 >+PrintScreen::SnippingTool.Rectangular()  ; RShift & PrintScreen -> Capture Rectangular
 $PrintScreen::
-	if (!GetKeyState("AppsKey", "p")) {
+	if (GetKeyState("AppsKey", "p")) {
 		AppsKeyEnabled := false
 		SnippingTool.Window()              ; AppsKey & PrintScreen -> Capture Window
 	} else
