@@ -60,11 +60,6 @@ global XButton2Enabled         := true
 global AppsKeyEnabled          := true
 global ReleaseLWin             := false
 
-global CursorHidden            := false
-
-global DistanceX               := 0
-global DistanceY               := 0
-
 ; ---- Functions ----
 
 DeviceChange(wParam, lParam, msg, hwnd) {
@@ -96,10 +91,8 @@ XButton1EventHandler(state) {
 			Interception.UnsubscribeMouseMove(MouseId)
 		if (XButton1Enabled)
 			Send {Browser_Back}
-		else {
+		else
 			XButton1Enabled := true
-			ShowCursor()
-		}
 	} else if (MouseId > 10 || MouseId <= 20)
 		Interception.SubscribeMouseMove(MouseId, true, Func("BallScrollHorizontal"))
 }
@@ -110,10 +103,8 @@ XButton2EventHandler(state) {
 			Interception.UnsubscribeMouseMove(MouseId)
 		if (XButton2Enabled)
 			Send {Browser_Forward}
-		else {
+		else
 			XButton2Enabled := true
-			ShowCursor()
-		}
 	} else if (MouseId > 10 || MouseId <= 20)
 		Interception.SubscribeMouseMove(MouseId, true, Func("BallScrollVertical"))
 }
@@ -122,7 +113,6 @@ WheelVerticalEventHandler(state) {
 	if (XButton1Down) {
 		if (XButton1Enabled)
 			XButton1Enabled := false
-		ShowCursor()
 		if (state == 1)
 			Display.BrightnessStepUp()
 		else
@@ -135,7 +125,6 @@ WheelVerticalEventHandler(state) {
 	} else if (XButton2Down) {
 		if (XButton2Enabled)
 			XButton2Enabled := false
-		ShowCursor()
 		if (state == 1)
 			Sound.VolumeStepUp()
 		else
@@ -152,27 +141,25 @@ WheelVerticalEventHandler(state) {
 }
 
 BallScrollHorizontal(x, y) {
+	static distance := 0
 	if (XButton1Enabled)
 		XButton1Enabled := false
-	HideCursor()
 	btn := x > 0 ? "WheelRight" : "WheelLeft"
-	DistanceX += x
-	dist := abs(DistanceX) // BallScrollDeadzone
-	DistanceX -= (DistanceX > 0 ? 1 : -1) * dist * BallScrollDeadzone
-	MouseClick %btn%,,,%dist%
-	SetTimer ShowCursor, 500
+	distance += x
+	cnt := abs(distance) // BallScrollDeadzone
+	distance -= (distance > 0 ? 1 : -1) * cnt * BallScrollDeadzone
+	MouseClick %btn%,,,%cnt%
 }
 
 BallScrollVertical(x, y) {
+	static distance := 0
 	if (XButton2Enabled)
 		XButton2Enabled := false
-	HideCursor()
 	btn := y > 0 ? "WheelDown" : "WheelUp"
-	DistanceY += y
-	dist := abs(DistanceY) // BallScrollDeadzone
-	DistanceY -= (DistanceY > 0 ? 1 : -1) * dist * BallScrollDeadzone
-	MouseClick %btn%,,,%dist%
-	SetTimer ShowCursor, 500
+	distance += y
+	cnt := abs(distance) // BallScrollDeadzone
+	distance -= (distance > 0 ? 1 : -1) * cnt * BallScrollDeadzone
+	MouseClick %btn%,,,%cnt%
 }
 
 ChangeBrightness(increase, jump) {
@@ -231,50 +218,6 @@ ChangeVolume(increase, jump) {
 	}
 }
 
-; Function from the AHK documentation @ https://autohotkey.com/docs/commands/DllCall.htm
-SystemCursor(OnOff := 1) {  ; INIT = "I", "Init"; OFF = 0, "Off"; TOGGLE = -1, "T", "Toggle"; ON = others
-    static AndMask, XorMask, $, h_cursor
-        , c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13 ; system cursors
-        , b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13     ; blank cursors
-        , h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13     ; handles of default cursors
-    if (OnOff = "Init" || OnOff = "I" || $ = "") { ; init when requested or at first call
-        $ = h                                      ; active default cursors
-        VarSetCapacity(h_cursor, 4444, 1)
-        VarSetCapacity(AndMask, 32 * 4, 0xFF)
-        VarSetCapacity(XorMask, 32 * 4, 0)
-        system_cursors = 32512, 32513, 32514, 32515, 32516, 32642, 32643, 32644, 32645, 32646, 32648, 32649, 32650
-        StringSplit c, system_cursors, `,
-        Loop %c0% {
-            h_cursor   := DllCall("LoadCursor", "Ptr", 0, "Ptr", c%A_Index%)
-            h%A_Index% := DllCall("CopyImage", "Ptr", h_cursor, "UInt", 2, "Int", 0, "Int", 0, "UInt", 0)
-            b%A_Index% := DllCall("CreateCursor", "Ptr", 0, "Int", 0, "Int", 0
-                , "Int", 32, "Int", 32, "Ptr", &AndMask, "Ptr", &XorMask)
-        }
-    }
-    if (OnOff = 0 || OnOff = "Off" || $ = "h" && (OnOff < 0 || OnOff = "Toggle" || OnOff = "T"))
-        $ = b ; use blank cursors
-    else
-        $ = h ; use the saved cursors
-    Loop %c0% {
-        h_cursor := DllCall("CopyImage", "Ptr", %$%%A_Index%, "UInt", 2, "Int", 0, "Int", 0, "UInt", 0)
-        DllCall("SetSystemCursor", "Ptr", h_cursor, "UInt", c%A_Index%)
-    }
-}
-
-ShowCursor() {
-	if (!CursorHidden)
-		return
-	CursorHidden := false
-	SystemCursor("On")
-}
-
-HideCursor() {
-	if (CursorHidden)
-		return
-	CursorHidden := true
-	SystemCursor("Off")
-}
-
 QuickToolTip(text, delay) {
 	ToolTip % text
 	SetTimer, ToolTipOff, % delay
@@ -303,13 +246,6 @@ DllCall("SystemParametersInfo", UInt, SPI_SETWHEELSCROLLCHARS, UInt, 1, UIntP, 0
 OnError(Func("TryUnsubscribeInterception"))
 OnExit(Func("TryUnsubscribeInterception"))
 return
-
-; ---- ShowCursor timer body ----
-
-ShowCursor:
-	ShowCursor()
-	SetTimer ShowCursor, Off
-	return
 
 ; ---- Hotkeys ----
 
