@@ -86,7 +86,9 @@ TryUnsubscribeInterception() {
 }
 
 XButton1EventHandler(state) {
-	if (!XButton1Down := state) {
+	if (WinActive("ahk_class VMUIFrame") || WinActive("ahk_exe vmware.exe"))
+		Interception.SendMouseButtonEvent(MouseId, 3, state)
+	else if (!XButton1Down := state) {
 		if (MouseId > 10 || MouseId <= 20)
 			Interception.UnsubscribeMouseMove(MouseId)
 		if (XButton1Enabled)
@@ -98,7 +100,9 @@ XButton1EventHandler(state) {
 }
 
 XButton2EventHandler(state) {
-	if (!XButton2Down := state) {
+	if (WinActive("ahk_class VMUIFrame") || WinActive("ahk_exe vmware.exe"))
+		Interception.SendMouseButtonEvent(MouseId, 4, state)
+	else if (!XButton2Down := state) {
 		if (MouseId > 10 || MouseId <= 20)
 			Interception.UnsubscribeMouseMove(MouseId)
 		if (XButton2Enabled)
@@ -110,7 +114,9 @@ XButton2EventHandler(state) {
 }
 
 WheelVerticalEventHandler(state) {
-	if (XButton1Down) {
+	if (WinActive("ahk_class VMUIFrame") || WinActive("ahk_exe vmware.exe"))
+		Interception.SendMouseButtonEvent(MouseId, 5, state)
+	else if (XButton1Down) {
 		if (XButton1Enabled)
 			XButton1Enabled := false
 		if (state == 1)
