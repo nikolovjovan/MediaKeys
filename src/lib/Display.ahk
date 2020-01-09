@@ -130,8 +130,13 @@ class Display {
 		}
 		newValue := Display.GetBrightness()
 		if (!shown) {
+			scaling := A_ScreenDPI / 96
+			xPos := 50 * scaling
+			yPos := 200 * scaling
+			width := 65
+			height := 30
 			value := newValue
-			Progress, B H30 W65 X62 Y250 ZH0 ZX5 ZY0 FS10 WS500 CTWhite CW101010, %value%
+			Progress, B X%xPos% Y%yPos% W%width% H%height% ZH0 ZX5 ZY0 FS10 WS500 CTWhite CW101010, %value%
 		} else if (newValue != value) {
 			value := newValue
 			Progress, , %value%

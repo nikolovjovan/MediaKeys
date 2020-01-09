@@ -1,5 +1,5 @@
 #NoEnv                                   ; Recommended for performance and compatibility with future AutoHotkey releases
-#NoTrayIcon                              ; Disable the tray icon (we don't need it anyways)
+; #NoTrayIcon                              ; Disable the tray icon (we don't need it anyways)
 ; #Warn                                    ; Enable warnings to assist with detecting common errors
 #SingleInstance force                    ; Allow only one instance to be run at one time
 #Persistent                              ; Keep the script running until it is explicitly closed
@@ -35,7 +35,7 @@ global BallScrollDeadzone      := 10     ; Distance needed to move the trackball
 global ShowOSD                 := true   ; Specifies whether to show Windows OSD for brightness and volume control (available only on Windows 8+)
 global ShowBrightnessLevel     := true   ; Specifies whether to show brightness level underneath the Windows 10 OSD (visible only if ShowOSD is true)
 
-; -- Unmutable Constants --
+; -- Immutable Constants --
 
 global WM_DEVICECHANGE         := 0x0219 ; Windows Message device change
 global DBT_DEVNODES_CHANGED    := 0x0007 ; Windows Event device nodes changed
@@ -48,7 +48,8 @@ global SPIF_SENDCHANGE         := 0x0002 ; SystemParametersInfo fWinIni Paramete
 ; ---- Variables ----
 
 global Interception            := new AutoHotInterception().GetInstance()
-global MouseHandle             := "HID\VID_046D&PID_C52B&REV_2407&MI_02&Qid_1028&WI_01&Class_00000004" ; Logitech M570
+global MouseHandle             := "HID\VID_046D&PID_C52B&REV_2407&MI_02&Qid_1028&WI_01&Class_00000004" ; Logitech M570 first receiver
+global MouseHandle2            := "HID\VID_046D&PID_C52B&REV_1209&MI_02&Qid_1028&WI_02&Class_00000004" ; Logitech M570 second receiver
 global MouseId                 := 0 ; Interception Mouse Id
 
 global XButton1Down            := false
@@ -69,8 +70,11 @@ DeviceChange(wParam, lParam, msg, hwnd) {
 
 TryInitializeInterception() {
 	MouseId := Interception.GetMouseIdFromHandle(MouseHandle)
-	if (MouseId < 11 || MouseId > 20)
-		return
+	if (MouseId < 11 || MouseId > 20) {
+		MouseId := Interception.GetMouseIdFromHandle(MouseHandle2)
+		if (MouseId < 11 || MouseId > 20)
+			return
+	}
 	Interception.SubscribeMouseButton(MouseId, 3, true, Func("XButton1EventHandler"))
 	Interception.SubscribeMouseButton(MouseId, 4, true, Func("XButton2EventHandler"))
 	Interception.SubscribeMouseButton(MouseId, 5, true, Func("WheelVerticalEventHandler"))
@@ -86,7 +90,7 @@ TryUnsubscribeInterception() {
 }
 
 XButton1EventHandler(state) {
-	if (WinActive("ahk_class VMUIFrame") || WinActive("ahk_exe vmware.exe"))
+	if (WinActive("ahk_class VMUIFrame") || WinActive("ahk_class VMPlayerFrame") || WinActive("ahk_exe vmware.exe") || WinActive("ahk_exe vmplayer.exe"))
 		Interception.SendMouseButtonEvent(MouseId, 3, state)
 	else if (!XButton1Down := state) {
 		if (MouseId > 10 || MouseId <= 20)
@@ -100,7 +104,7 @@ XButton1EventHandler(state) {
 }
 
 XButton2EventHandler(state) {
-	if (WinActive("ahk_class VMUIFrame") || WinActive("ahk_exe vmware.exe"))
+	if (WinActive("ahk_class VMUIFrame") || WinActive("ahk_class VMPlayerFrame") || WinActive("ahk_exe vmware.exe") || WinActive("ahk_exe vmplayer.exe"))
 		Interception.SendMouseButtonEvent(MouseId, 4, state)
 	else if (!XButton2Down := state) {
 		if (MouseId > 10 || MouseId <= 20)
@@ -114,7 +118,7 @@ XButton2EventHandler(state) {
 }
 
 WheelVerticalEventHandler(state) {
-	if (WinActive("ahk_class VMUIFrame") || WinActive("ahk_exe vmware.exe"))
+	if (WinActive("ahk_class VMUIFrame") || WinActive("ahk_class VMPlayerFrame") || WinActive("ahk_exe vmware.exe") || WinActive("ahk_exe vmplayer.exe"))
 		Interception.SendMouseButtonEvent(MouseId, 5, state)
 	else if (XButton1Down) {
 		if (XButton1Enabled)
